@@ -8,9 +8,10 @@ Add this to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-firo_logger = "0.1.0"
+firo_logger = "*.*.*"
+```
 
-'''rust
+```rust
 use firo_logger::Logger;
 
 fn main() {
@@ -21,7 +22,10 @@ fn main() {
     Logger::debug("This is a debug message");
     Logger::success("This is a success message");
 }
-
+```
+## Output
+```
 2024-10-01 10:32:45 [INFO]:    Test logg
 2024-10-01 10:32:45 [ERROR]:   Test error
 2024-10-01 10:32:45 [WARNING]: Test warn
+```
