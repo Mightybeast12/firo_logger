@@ -14,7 +14,7 @@ impl Colours {
     pub const WHITE: &'static str = "\x1b[37m";
 }
 
-#[derive(Debug, PartialEq)] 
+#[derive(Debug, PartialEq)]
 pub enum LogLevel {
     Error,
     Warning,
@@ -54,7 +54,10 @@ impl Logger {
         let current_datetime = Local::now();
         let date = current_datetime.format("%Y-%m-%d %H:%M:%S").to_string();
 
-        let console_fmt = format!("{date}{colour_code} [{}]: \x1b[0m {message} ", level.as_str());
+        let console_fmt = format!(
+            "{date}{colour_code} [{}]: \x1b[0m {message} ",
+            level.as_str()
+        );
         let log_file_fmt = format!("{date} [{}]: {message} ", level.as_str());
         (console_fmt, log_file_fmt)
     }
@@ -125,7 +128,7 @@ impl Logger {
         Self::log_msg(LogLevel::Success, message);
     }
 }
- 
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -154,10 +157,10 @@ mod tests {
     #[test]
     fn test_log_success() {
         let (console, _) = Logger::format_message(LogLevel::Success, "Successful operation");
-        assert!(console.contains(Colours::GREEN)); 
+        assert!(console.contains(Colours::GREEN));
         assert!(console.contains("[SUCCESS]"));
     }
-    
+
     #[test]
     fn test_log_warning() {
         let (console, _) = Logger::format_message(LogLevel::Warning, "Warning message");
