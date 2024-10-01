@@ -125,7 +125,7 @@ impl Logger {
         Self::log_msg(LogLevel::Success, message);
     }
 }
-
+ 
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -154,14 +154,14 @@ mod tests {
     #[test]
     fn test_log_success() {
         let (console, _) = Logger::format_message(LogLevel::Success, "Successful operation");
-        assert!(console.contains(Colours::GREEN)); // Ensure it uses the correct color
+        assert!(console.contains(Colours::GREEN)); 
         assert!(console.contains("[SUCCESS]"));
     }
     
     #[test]
     fn test_log_warning() {
         let (console, _) = Logger::format_message(LogLevel::Warning, "Warning message");
-        assert!(console.contains(Colours::YELLOW)); // Ensure correct color is applied
+        assert!(console.contains(Colours::YELLOW));
         assert!(console.contains("[WARNING]"));
     }
 }
