@@ -15,12 +15,10 @@ firo_logger = "*.*.*"
 use firo_logger::Logger;
 
 fn main() {
-    Logger::log("This is a log message");
-    Logger::error("This is an error message");
-    Logger::warning("This is a warning message");
-    Logger::info("This is an info message");
-    Logger::debug("This is a debug message");
-    Logger::success("This is a success message");
+    log_error!("Error occurred: {}", "File not found");
+    log_success!("Operation completed successfully: {}", "data.txt");
+    log_info!("User {} logged in", "Alice");
+
 }
 ```
 ## Output
