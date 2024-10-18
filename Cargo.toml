@@ -1,6 +1,6 @@
 [package]
 name = "firo_logger"
-version = "0.2.0"
+version = "0.2.1"
 edition = "2021"
 authors = ["Firat Honca <firathonca@gmail.com"]
 description = "A logger that prints colours"
