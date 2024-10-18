@@ -2,6 +2,7 @@ use chrono::Local;
 use std::env;
 use std::fs::OpenOptions;
 use std::io::{self, Write};
+use std::fmt::Arguments;
 
 struct Colours;
 
@@ -54,10 +55,7 @@ impl Logger {
         let current_datetime = Local::now();
         let date = current_datetime.format("%Y-%m-%d %H:%M:%S").to_string();
 
-        let console_fmt = format!(
-            "{date}{colour_code} [{}]: \x1b[0m {message} ",
-            level.as_str()
-        );
+        let console_fmt = format!("{date}{colour_code} [{}]: \x1b[0m {message} ", level.as_str());
         let log_file_fmt = format!("{date} [{}]: {message} ", level.as_str());
         (console_fmt, log_file_fmt)
     }
@@ -98,36 +96,71 @@ impl Logger {
         Ok(())
     }
 
-    fn log_msg(level: LogLevel, message: &str) {
-        let (console_fmt, log_file_fmt) = Self::format_message(level, message);
+    // Updated to take `fmt::Arguments`
+    fn log_msg(level: LogLevel, message: Arguments) {
+        let formatted_message = format!("{}", message); // Convert `Arguments` to a String
+        let (console_fmt, log_file_fmt) = Self::format_message(level, &formatted_message);
         println!("{}", console_fmt);
         let _ = Self::file_log(&log_file_fmt);
     }
 
-    pub fn log(message: &str) {
-        Self::log_msg(LogLevel::Log, message);
+    // Public logging functions, accepting formatted arguments
+    pub fn log(args: Arguments) {
+        Self::log_msg(LogLevel::Log, args);
     }
 
-    pub fn error(message: &str) {
-        Self::log_msg(LogLevel::Error, message);
+    pub fn error(args: Arguments) {
+        Self::log_msg(LogLevel::Error, args);
     }
 
-    pub fn warning(message: &str) {
-        Self::log_msg(LogLevel::Warning, message);
+    pub fn warning(args: Arguments) {
+        Self::log_msg(LogLevel::Warning, args);
     }
 
-    pub fn debug(message: &str) {
-        Self::log_msg(LogLevel::Debug, message);
+    pub fn debug(args: Arguments) {
+        Self::log_msg(LogLevel::Debug, args);
     }
 
-    pub fn info(message: &str) {
-        Self::log_msg(LogLevel::Info, message);
+    pub fn info(args: Arguments) {
+        Self::log_msg(LogLevel::Info, args);
     }
 
-    pub fn success(message: &str) {
-        Self::log_msg(LogLevel::Success, message);
+    pub fn success(args: Arguments) {
+        Self::log_msg(LogLevel::Success, args);
     }
 }
+
+// Helper macros to allow formatted logging
+macro_rules! log_error {
+    ($($arg:tt)*) => {
+        Logger::error(format_args!($($arg)*))
+    };
+}
+
+macro_rules! log_warning {
+    ($($arg:tt)*) => {
+        Logger::warning(format_args!($($arg)*))
+    };
+}
+
+macro_rules! log_info {
+    ($($arg:tt)*) => {
+        Logger::info(format_args!($($arg)*))
+    };
+}
+
+macro_rules! log_debug {
+    ($($arg:tt)*) => {
+        Logger::debug(format_args!($($arg)*))
+    };
+}
+
+macro_rules! log_success {
+    ($($arg:tt)*) => {
+        Logger::success(format_args!($($arg)*))
+    };
+}
+
 
 #[cfg(test)]
 mod tests {
@@ -157,14 +190,14 @@ mod tests {
     #[test]
     fn test_log_success() {
         let (console, _) = Logger::format_message(LogLevel::Success, "Successful operation");
-        assert!(console.contains(Colours::GREEN));
+        assert!(console.contains(Colours::GREEN)); // Ensure it uses the correct color
         assert!(console.contains("[SUCCESS]"));
     }
-
+    
     #[test]
     fn test_log_warning() {
         let (console, _) = Logger::format_message(LogLevel::Warning, "Warning message");
-        assert!(console.contains(Colours::YELLOW));
+        assert!(console.contains(Colours::YELLOW)); // Ensure correct color is applied
         assert!(console.contains("[WARNING]"));
     }
 }
