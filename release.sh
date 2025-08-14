@@ -248,7 +248,7 @@ run_preflight_checks() {
         git fetch origin "$MAIN_BRANCH" --quiet
         local local_commit=$(git rev-parse HEAD)
         local remote_commit=$(git rev-parse "origin/$MAIN_BRANCH")
-        
+
         if [ "$local_commit" != "$remote_commit" ]; then
             # Check if local is behind remote (need to pull)
             if git merge-base --is-ancestor "$local_commit" "$remote_commit"; then
@@ -284,17 +284,60 @@ run_tests() {
     print_success "All tests passed"
 }
 
-# Function to check if tag already exists
-check_existing_tag() {
+# Function to handle existing tags by removing them
+handle_existing_tag() {
     local version=$1
     local tag="v$version"
+    local tag_exists_locally=false
+    local tag_exists_remotely=false
 
+    # Check if tag exists locally
     if git tag -l "$tag" | grep -q .; then
-        print_error "Tag $tag already exists!"
-        print_info "Existing tags:"
-        git tag -l | tail -5
-        exit 1
+        tag_exists_locally=true
     fi
+
+    # Check if tag exists remotely (skip in dry-run mode)
+    if [ "$DRY_RUN" = "false" ]; then
+        if git ls-remote --tags origin | grep -q "refs/tags/$tag"; then
+            tag_exists_remotely=true
+        fi
+    fi
+
+    # If tag doesn't exist anywhere, we're done
+    if [ "$tag_exists_locally" = "false" ] && [ "$tag_exists_remotely" = "false" ]; then
+        return
+    fi
+
+    # Tag exists - handle it
+    print_warning "Tag $tag already exists - removing stale tag..."
+
+    # Remove local tag
+    if [ "$tag_exists_locally" = "true" ]; then
+        if [ "$DRY_RUN" = "true" ]; then
+            print_info "Would remove local tag: $tag"
+        else
+            print_step "Removing local tag $tag"
+            git tag -d "$tag"
+            print_success "Local tag removed"
+        fi
+    fi
+
+    # Remove remote tag
+    if [ "$tag_exists_remotely" = "true" ]; then
+        if [ "$DRY_RUN" = "true" ]; then
+            print_info "Would remove remote tag: $tag"
+        else
+            print_step "Removing remote tag $tag"
+            if git push origin ":refs/tags/$tag" 2>/dev/null; then
+                print_success "Remote tag removed"
+            else
+                print_warning "Failed to remove remote tag (might not have permissions)"
+                print_info "You may need to manually remove it with: git push origin :refs/tags/$tag"
+            fi
+        fi
+    fi
+
+    print_success "Stale tag cleaned up, continuing with release"
 }
 
 # Function to get increment type interactively
@@ -429,8 +472,8 @@ main() {
     local new_version=$(increment_version "$current_version" "$increment_type")
     NEW_VERSION="$new_version"  # Store for cleanup function
 
-    # Check if tag already exists
-    check_existing_tag "$new_version"
+    # Handle existing tag (remove if exists)
+    handle_existing_tag "$new_version"
 
     # Show summary and confirm
     confirm_release "$current_version" "$new_version" "$increment_type"
@@ -439,7 +482,7 @@ main() {
     print_step "Updating version files..."
     update_cargo_version "$new_version"
     update_changelog "$new_version"
-    
+
     # Commit changes before running tests (needed for cargo package)
     if [ "$DRY_RUN" = "false" ]; then
         print_step "Committing version changes..."
