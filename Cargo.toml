@@ -1,6 +1,6 @@
 [package]
 name        = "firo_logger"
-version     = "1.6.0"
+version     = "1.8.0"
 edition     = "2021"
 authors     = ["Firat Honca <firathonca@gmail.com>"]
 description = "A high-performance, feature-rich logger for Rust applications with colored output, structured logging, and advanced configuration"
