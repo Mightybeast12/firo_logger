@@ -358,21 +358,16 @@ confirm_release() {
     done
 }
 
-# Function to create release commit and tag
-create_release() {
+# Function to create tag and push
+create_tag_and_push() {
     local new_version=$1
     local tag="v$new_version"
 
     if [ "$DRY_RUN" = "true" ]; then
-        print_info "Would create commit: chore: release $tag"
         print_info "Would create tag: $tag"
         print_info "Would push to origin/$MAIN_BRANCH"
         return
     fi
-
-    print_step "Creating release commit..."
-    git add "$CARGO_TOML" "$CHANGELOG"
-    git commit -m "chore: release $tag"
 
     print_step "Creating git tag..."
     git tag -a "$tag" -m "Release $tag"
@@ -440,16 +435,23 @@ main() {
     # Show summary and confirm
     confirm_release "$current_version" "$new_version" "$increment_type"
 
-    # Update version files BEFORE running tests
+    # Update version files and commit BEFORE running tests
     print_step "Updating version files..."
     update_cargo_version "$new_version"
     update_changelog "$new_version"
+    
+    # Commit changes before running tests (needed for cargo package)
+    if [ "$DRY_RUN" = "false" ]; then
+        print_step "Committing version changes..."
+        git add "$CARGO_TOML" "$CHANGELOG"
+        git commit -m "chore: release v$new_version"
+    fi
 
-    # Run tests with updated version
+    # Run tests with updated and committed version
     run_tests
 
-    # Create release
-    create_release "$new_version"
+    # Create tag and push
+    create_tag_and_push "$new_version"
 }
 
 # Run main function with all arguments
