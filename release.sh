@@ -110,7 +110,7 @@ get_current_version() {
         exit 1
     fi
 
-    grep -E '^version = ' "$CARGO_TOML" | sed -E 's/version = "([^"]+)"/\1/' | head -1
+    grep '^version' "$CARGO_TOML" | cut -d'"' -f2 | head -1
 }
 
 # Function to increment version
@@ -215,27 +215,36 @@ run_preflight_checks() {
         exit 1
     fi
 
-    # Check for uncommitted changes
+    # Check for uncommitted changes (skip in dry-run mode)
     if ! git diff-index --quiet HEAD --; then
-        print_error "Uncommitted changes detected"
-        print_info "Fix: git add . && git commit -m 'your message' OR git stash"
-        git status --short
-        exit 1
+        if [ "$DRY_RUN" = "false" ]; then
+            print_error "Uncommitted changes detected"
+            print_info "Fix: git add . && git commit -m 'your message' OR git stash"
+            git status --short
+            exit 1
+        else
+            print_warning "Uncommitted changes detected (allowed in dry-run mode)"
+            git status --short
+        fi
     fi
 
-    # Check if we can reach the remote
-    if ! git ls-remote origin >/dev/null 2>&1; then
-        print_error "Cannot reach remote repository"
-        print_info "Fix: Check your internet connection and git remote configuration"
-        exit 1
-    fi
+    # Check if we can reach the remote (skip in dry-run mode)
+    if [ "$DRY_RUN" = "false" ]; then
+        if ! git ls-remote origin >/dev/null 2>&1; then
+            print_error "Cannot reach remote repository"
+            print_info "Fix: Check your internet connection and git remote configuration"
+            exit 1
+        fi
 
-    # Check if we're up to date with remote
-    git fetch origin "$MAIN_BRANCH" --quiet
-    if [ "$(git rev-parse HEAD)" != "$(git rev-parse "origin/$MAIN_BRANCH")" ]; then
-        print_error "Local branch is not up to date with origin/$MAIN_BRANCH"
-        print_info "Fix: git pull origin $MAIN_BRANCH"
-        exit 1
+        # Check if we're up to date with remote
+        git fetch origin "$MAIN_BRANCH" --quiet
+        if [ "$(git rev-parse HEAD)" != "$(git rev-parse "origin/$MAIN_BRANCH")" ]; then
+            print_error "Local branch is not up to date with origin/$MAIN_BRANCH"
+            print_info "Fix: git pull origin $MAIN_BRANCH"
+            exit 1
+        fi
+    else
+        print_info "Skipping remote checks in dry-run mode"
     fi
 
     print_success "Pre-flight checks passed"
@@ -276,25 +285,26 @@ check_existing_tag() {
 get_increment_type_interactive() {
     local current_version=$1
 
-    echo
-    echo -e "${CYAN}🚀 Release Script for firo_logger${NC}"
-    echo -e "${BLUE}Current version: $current_version${NC}"
-    echo
-    echo "How would you like to increment the version?"
-    echo "1) Patch ($current_version → $(increment_version "$current_version" "patch")) - Bug fixes"
-    echo "2) Minor ($current_version → $(increment_version "$current_version" "minor")) - New features"
-    echo "3) Major ($current_version → $(increment_version "$current_version" "major")) - Breaking changes"
-    echo "4) Cancel"
-    echo
+    printf "\n"
+    printf "${CYAN}🚀 Release Script for firo_logger${NC}\n"
+    printf "${BLUE}Current version: $current_version${NC}\n"
+    printf "\n"
+    printf "How would you like to increment the version?\n"
+    printf "1) Patch ($current_version → $(increment_version "$current_version" "patch")) - Bug fixes\n"
+    printf "2) Minor ($current_version → $(increment_version "$current_version" "minor")) - New features\n"
+    printf "3) Major ($current_version → $(increment_version "$current_version" "major")) - Breaking changes\n"
+    printf "4) Cancel\n"
+    printf "\n"
 
     while true; do
-        read -p "Select (1-4): " choice
+        printf "Select (1-4): "
+        read choice
         case $choice in
             1) echo "patch"; break ;;
             2) echo "minor"; break ;;
             3) echo "major"; break ;;
             4) print_info "Release cancelled"; exit 0 ;;
-            *) echo "Please select 1-4" ;;
+            *) printf "Please select 1-4\n" ;;
         esac
     done
 }
@@ -370,27 +380,28 @@ main() {
     local increment_type=""
 
     # Parse command line arguments
-    case "${1:-}" in
-        --help|-h)
-            show_help
-            exit 0
-            ;;
-        --dry-run)
-            DRY_RUN=true
-            print_info "Running in DRY RUN mode"
-            ;;
-        patch|minor|major)
-            increment_type="$1"
-            ;;
-        "")
-            # Interactive mode - will be handled later
-            ;;
-        *)
-            print_error "Unknown argument: $1"
-            echo "Use --help for usage information"
-            exit 1
-            ;;
-    esac
+    while [[ $# -gt 0 ]]; do
+        case $1 in
+            --help|-h)
+                show_help
+                exit 0
+                ;;
+            --dry-run)
+                DRY_RUN=true
+                print_info "Running in DRY RUN mode"
+                shift
+                ;;
+            patch|minor|major)
+                increment_type="$1"
+                shift
+                ;;
+            *)
+                print_error "Unknown argument: $1"
+                echo "Use --help for usage information"
+                exit 1
+                ;;
+        esac
+    done
 
     # Store current version
     local current_version=$(get_current_version)
