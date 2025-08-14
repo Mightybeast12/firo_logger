@@ -50,7 +50,7 @@ impl LogRecord {
     pub fn new(level: LogLevel, args: Arguments) -> Self {
         Self {
             level,
-            message: format!("{}", args),
+            message: format!("{args}"),
             timestamp: Local::now(),
             module: None,
             caller: None,
@@ -213,7 +213,7 @@ impl Formatter for TextFormatter {
         // Add module information if requested
         if self.include_module {
             if let Some(ref module) = record.module {
-                parts.push(format!("[{}]", module));
+                parts.push(format!("[{module}]"));
             }
         }
 
@@ -221,7 +221,7 @@ impl Formatter for TextFormatter {
         if self.include_caller {
             if let Some(ref caller) = record.caller {
                 let caller_info = format!("{}:{}", caller.file, caller.line);
-                parts.push(format!("[{}]", caller_info));
+                parts.push(format!("[{caller_info}]"));
             }
         }
 
@@ -233,7 +233,7 @@ impl Formatter for TextFormatter {
             let metadata_parts: Vec<String> = record
                 .metadata
                 .iter()
-                .map(|(k, v)| format!("{}={}", k, v))
+                .map(|(k, v)| format!("{k}={v}"))
                 .collect();
             parts.push(format!("[{}]", metadata_parts.join(", ")));
         }
@@ -438,7 +438,7 @@ impl Formatter for PlainFormatter {
         // Add module information if requested
         if self.include_module {
             if let Some(ref module) = record.module {
-                parts.push(format!("[{}]", module));
+                parts.push(format!("[{module}]"));
             }
         }
 
@@ -446,7 +446,7 @@ impl Formatter for PlainFormatter {
         if self.include_caller {
             if let Some(ref caller) = record.caller {
                 let caller_info = format!("{}:{}", caller.file, caller.line);
-                parts.push(format!("[{}]", caller_info));
+                parts.push(format!("[{caller_info}]"));
             }
         }
 
@@ -458,7 +458,7 @@ impl Formatter for PlainFormatter {
             let metadata_parts: Vec<String> = record
                 .metadata
                 .iter()
-                .map(|(k, v)| format!("{}={}", k, v))
+                .map(|(k, v)| format!("{k}={v}"))
                 .collect();
             parts.push(format!("[{}]", metadata_parts.join(", ")));
         }

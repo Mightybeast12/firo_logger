@@ -15,16 +15,16 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let total_messages = num_threads * messages_per_thread;
 
     println!("Test configuration:");
-    println!("  - Threads: {}", num_threads);
-    println!("  - Messages per thread: {}", messages_per_thread);
-    println!("  - Total messages: {}", total_messages);
+    println!("  - Threads: {num_threads}");
+    println!("  - Messages per thread: {messages_per_thread}");
+    println!("  - Total messages: {total_messages}");
     println!();
 
     // Test 1: Synchronous logging
     println!("🔄 Testing synchronous logging...");
     let sync_duration = benchmark_sync_logging(num_threads, messages_per_thread)?;
 
-    println!("✅ Sync test completed in {:.2?}", sync_duration);
+    println!("✅ Sync test completed in {sync_duration:.2?}");
     println!(
         "   Throughput: {:.0} messages/second",
         total_messages as f64 / sync_duration.as_secs_f64()
@@ -38,7 +38,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("⚡ Testing asynchronous logging...");
     let async_duration = benchmark_async_logging(num_threads, messages_per_thread)?;
 
-    println!("✅ Async test completed in {:.2?}", async_duration);
+    println!("✅ Async test completed in {async_duration:.2?}");
     println!(
         "   Throughput: {:.0} messages/second",
         total_messages as f64 / async_duration.as_secs_f64()
@@ -60,7 +60,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let speedup = sync_duration.as_secs_f64() / async_duration.as_secs_f64();
     if speedup > 1.0 {
-        println!("   🚀 Async is {:.1}x faster than sync!", speedup);
+        println!("   🚀 Async is {speedup:.1}x faster than sync!");
     } else {
         println!("   📊 Sync is {:.1}x faster than async", 1.0 / speedup);
     }
@@ -101,8 +101,7 @@ fn benchmark_sync_logging(
 
             // Log messages
             for i in 0..messages_per_thread {
-                if let Err(_) = log_info!("Sync benchmark message {} from thread {}", i, thread_id)
-                {
+                if log_info!("Sync benchmark message {} from thread {}", i, thread_id).is_err() {
                     break; // Stop on error
                 }
             }
@@ -157,8 +156,7 @@ fn benchmark_async_logging(
 
             // Log messages
             for i in 0..messages_per_thread {
-                if let Err(_) = log_info!("Async benchmark message {} from thread {}", i, thread_id)
-                {
+                if log_info!("Async benchmark message {} from thread {}", i, thread_id).is_err() {
                     break; // Stop on error
                 }
             }

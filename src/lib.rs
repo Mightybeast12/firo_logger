@@ -163,7 +163,6 @@ pub use macros::__FunctionTraceGuard;
 // due to the #[macro_export] attribute, but we can also make them available
 // through the crate root for documentation purposes.
 
-/// Legacy compatibility with the old simple API
 pub mod legacy {
     //! Legacy compatibility module for the old firo_logger API.
     //!
@@ -285,7 +284,7 @@ pub mod log_integration {
     pub struct FiroLoggerAdapter;
 
     impl log::Log for FiroLoggerAdapter {
-        fn enabled(&self, metadata: &Metadata) -> bool {
+        fn enabled(&self, _metadata: &Metadata) -> bool {
             // Enable all log levels - firo_logger will handle filtering
             true
         }
@@ -304,12 +303,10 @@ pub mod log_integration {
             };
 
             let module = record.module_path();
-            let file = record.file().unwrap_or("<unknown>");
-            let line = record.line().unwrap_or(0);
 
-            let caller = crate::CallerInfo { file, line, module };
-
-            let _ = crate::log_with_caller(level, *record.args(), Some(caller), module);
+            // For log crate integration, we can't provide proper caller info due to lifetime constraints
+            // Instead, we'll just log without caller info but still pass the module
+            let _ = crate::log_with_caller(level, *record.args(), None, module);
         }
 
         fn flush(&self) {
@@ -327,7 +324,6 @@ pub mod log_integration {
     }
 }
 
-/// Utility functions and helpers.
 pub mod utils {
     //! Utility functions for common logging patterns.
 

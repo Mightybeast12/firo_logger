@@ -20,7 +20,7 @@ static GLOBAL_LOGGER: OnceCell<Arc<LoggerInstance>> = OnceCell::new();
 
 // Thread-local logger storage for scoped logging.
 thread_local! {
-    static THREAD_LOCAL_LOGGER: RefCell<Option<Arc<LoggerInstance>>> = RefCell::new(None);
+    static THREAD_LOCAL_LOGGER: RefCell<Option<Arc<LoggerInstance>>> = const { RefCell::new(None) };
 }
 
 /// Sets a scoped logger for the current thread.
@@ -183,8 +183,10 @@ impl LoggerInstance {
             (None, None)
         };
 
-        let mut stats = LoggerStats::default();
-        stats.start_time = Some(SystemTime::now());
+        let stats = LoggerStats {
+            start_time: Some(SystemTime::now()),
+            ..Default::default()
+        };
 
         Ok(LoggerInstance {
             config: RwLock::new(config),
@@ -226,7 +228,7 @@ impl LoggerInstance {
                                 formatter.format(&msg.record)
                             };
 
-                            if let Err(_) = writer.write(&msg.record, &formatted) {
+                            if writer.write(&msg.record, &formatted).is_err() {
                                 // Log errors are silently ignored in async mode
                                 // to prevent infinite loops
                             }
@@ -333,10 +335,9 @@ impl LoggerInstance {
             drop(config);
 
             let mut writer = self.writer.lock();
-            writer.write(&record, &formatted).map_err(|e| {
+            writer.write(&record, &formatted).inspect_err(|_e| {
                 let mut stats = self.stats.lock();
                 stats.error_count += 1;
-                e
             })?;
         }
 
@@ -433,8 +434,10 @@ impl LoggerInstance {
     /// Resets logger statistics.
     pub fn reset_stats(&self) {
         let mut stats = self.stats.lock();
-        *stats = LoggerStats::default();
-        stats.start_time = Some(SystemTime::now());
+        *stats = LoggerStats {
+            start_time: Some(SystemTime::now()),
+            ..Default::default()
+        };
     }
 }
 
@@ -532,7 +535,7 @@ pub fn stats() -> Result<LoggerStats> {
 
 /// Convenience functions for common log levels with automatic caller detection.
 /// These would typically be used through macros.
-
+///
 /// Implementation detail for macros - logs with caller information.
 #[doc(hidden)]
 pub fn __log_with_location(
@@ -628,7 +631,7 @@ mod tests {
 
         // Log several messages
         for i in 0..10 {
-            logger.info(format_args!("Async message {}", i))?;
+            logger.info(format_args!("Async message {i}"))?;
         }
 
         // Give async thread time to process

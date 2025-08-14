@@ -139,7 +139,7 @@ fn show_generated_files() -> Result<(), Box<dyn std::error::Error>> {
         println!("  (No files found)");
     } else {
         for (filename, size) in files {
-            println!("  📄 {} ({} bytes)", filename, size);
+            println!("  📄 {filename} ({size} bytes)");
         }
     }
 
@@ -152,13 +152,13 @@ fn show_generated_files() -> Result<(), Box<dyn std::error::Error>> {
 
 fn show_file_content(filepath: &str) -> Result<(), Box<dyn std::error::Error>> {
     if let Ok(content) = fs::read_to_string(filepath) {
-        println!("\n📋 Content of {}:", filepath);
+        println!("\n📋 Content of {filepath}:");
         let lines: Vec<&str> = content.lines().collect();
 
         if lines.len() <= 3 {
             // Show all lines if 3 or fewer
             for line in lines {
-                println!("  {}", line);
+                println!("  {line}");
             }
         } else {
             // Show first 2 and last 1 lines with ellipsis

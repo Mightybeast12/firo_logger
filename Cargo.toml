@@ -1,6 +1,6 @@
 [package]
 name        = "firo_logger"
-version     = "1.0.0"
+version     = "1.1.0"
 edition     = "2021"
 authors     = ["Firat Honca <firathonca@gmail.com>"]
 description = "A high-performance, feature-rich logger for Rust applications with colored output, structured logging, and advanced configuration"
@@ -20,7 +20,7 @@ thiserror         = "2.0.14"
 anyhow            = "1.0"
 uuid              = { version = "1.18.0", features = ["v4"] }
 atty              = "0.2"
-log               = { version = "0.4.27", optional = true }
+log               = { version = "0.4.27", optional = true, features = ["std"] }
 
 [dev-dependencies]
 criterion = "0.7.0"

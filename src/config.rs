@@ -61,7 +61,7 @@ impl std::str::FromStr for LogLevel {
             "INFO" => Ok(LogLevel::Info),
             "SUCCESS" => Ok(LogLevel::Success),
             "DEBUG" => Ok(LogLevel::Debug),
-            _ => Err(LoggerError::Config(format!("Invalid log level: {}", s))),
+            _ => Err(LoggerError::Config(format!("Invalid log level: {s}"))),
         }
     }
 }
@@ -409,10 +409,10 @@ impl LoggerConfig {
         }
 
         // Check for parent module matches
-        let mut parts = module.split("::");
+        let parts = module.split("::");
         let mut current_path = String::new();
 
-        while let Some(part) = parts.next() {
+        for part in parts {
             if !current_path.is_empty() {
                 current_path.push_str("::");
             }
@@ -500,8 +500,10 @@ mod tests {
 
     #[test]
     fn test_module_filter() {
-        let mut config = LoggerConfig::default();
-        config.level = LogLevel::Info;
+        let mut config = LoggerConfig {
+            level: LogLevel::Info,
+            ..Default::default()
+        };
         config
             .module_filters
             .insert("my_crate::module".to_string(), LogLevel::Debug);

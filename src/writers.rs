@@ -59,9 +59,9 @@ impl Writer for ConsoleWriter {
 
         if self.use_stderr && (record.level == LogLevel::Error || record.level == LogLevel::Warning)
         {
-            eprintln!("{}", output);
+            eprintln!("{output}");
         } else {
-            println!("{}", output);
+            println!("{output}");
         }
         Ok(())
     }
@@ -295,7 +295,7 @@ impl FileWriter {
             for entry in entries.flatten() {
                 let path = entry.path();
                 if let Some(name) = path.file_name().and_then(|n| n.to_str()) {
-                    let pattern = format!("{}.{}", file_stem, extension);
+                    let pattern = format!("{file_stem}.{extension}");
                     if name.starts_with(&pattern)
                         && name != self.current_path.file_name().unwrap().to_str().unwrap()
                     {
@@ -327,7 +327,7 @@ impl Writer for FileWriter {
         self.check_and_rotate()?;
 
         if let Some(ref mut writer) = self.writer {
-            writeln!(writer, "{}", formatted)?;
+            writeln!(writer, "{formatted}")?;
             self.current_size += formatted.len() as u64 + 1; // +1 for newline
 
             // Auto-flush if interval is 0 or if enough time has passed

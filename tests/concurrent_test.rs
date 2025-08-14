@@ -51,15 +51,15 @@ fn test_concurrent_isolated_loggers() {
                     std::fs::read_to_string(temp_file.path()).expect("Failed to read log file");
 
                 // Verify this thread's messages are in its own file
-                assert!(content.contains(&format!("Thread {} starting", thread_id)));
-                assert!(content.contains(&format!("Thread {} processing", thread_id)));
-                assert!(content.contains(&format!("Thread {} error test", thread_id)));
-                assert!(content.contains(&format!("thread_id={}", thread_id)));
+                assert!(content.contains(&format!("Thread {thread_id} starting")));
+                assert!(content.contains(&format!("Thread {thread_id} processing")));
+                assert!(content.contains(&format!("Thread {thread_id} error test")));
+                assert!(content.contains(&format!("thread_id={thread_id}")));
 
                 // Verify no other thread's messages are in this file
                 for other_id in 0..num_threads {
                     if other_id != thread_id {
-                        assert!(!content.contains(&format!("Thread {} starting", other_id)));
+                        assert!(!content.contains(&format!("Thread {other_id} starting")));
                     }
                 }
 

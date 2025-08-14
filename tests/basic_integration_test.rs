@@ -70,9 +70,11 @@ fn test_environment_configuration() {
 #[test]
 fn test_configuration_validation() {
     // Test invalid configuration
-    let mut config = LoggerConfig::default();
-    config.console_enabled = false;
-    config.file_enabled = false;
+    let config = LoggerConfig {
+        console_enabled: false,
+        file_enabled: false,
+        ..Default::default()
+    };
 
     let result = config.validate();
     assert!(
