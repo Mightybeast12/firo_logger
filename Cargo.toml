@@ -5,7 +5,7 @@ edition     = "2021"
 authors     = ["Firat Honca <firathonca@gmail.com>"]
 description = "A high-performance, feature-rich logger for Rust applications with colored output, structured logging, and advanced configuration"
 license     = "MIT"
-repository  = "https://github.com/your-username/firo_logger"
+repository  = "https://github.com/Mightybeast12/firo_logger/"
 keywords    = ["logging", "logger", "colored", "structured", "async"]
 categories  = ["development-tools::debugging"]
 
