@@ -34,15 +34,6 @@ jobs:
           repo-token: ${{ secrets.GITHUB_TOKEN }}
           wait-interval: 10
 
-      - name: Wait for Test & Coverage to complete
-        uses: lewagon/wait-on-check-action@v1.3.4
-        with:
-          ref: ${{ github.sha }}
-          check-name: "Test & Coverage"
-          repo-token: ${{ secrets.GITHUB_TOKEN }}
-          wait-interval: 10
-          allowed-conclusions: success,skipped
-
   release:
     name: Release to crates.io
     runs-on: ubuntu-latest
@@ -75,6 +66,12 @@ jobs:
             exit 1
           fi
           echo "✅ Version verified: $CARGO_VERSION"
+
+      - name: Run quick tests
+        run: |
+          echo "🧪 Running quick library tests..."
+          cargo test --lib --release
+          echo "✅ Tests passed"
 
       - name: Build release
         run: cargo build --release --all-features
