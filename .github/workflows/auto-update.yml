@@ -1,0 +1,111 @@
+name: Auto Update Dependencies
+
+on:
+  pull_request:
+    types: [opened, synchronize]
+  pull_request_target:
+    types: [opened, synchronize]
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  dependabot-auto-merge:
+    name: Auto-merge Dependabot PRs
+    runs-on: ubuntu-latest
+    if: github.actor == 'dependabot[bot]'
+
+    steps:
+      - name: Dependabot metadata
+        id: metadata
+        uses: dependabot/fetch-metadata@v2
+        with:
+          github-token: "${{ secrets.GITHUB_TOKEN }}"
+
+      - name: Auto-approve
+        if: steps.metadata.outputs.update-type == 'version-update:semver-patch' || steps.metadata.outputs.update-type == 'version-update:semver-minor'
+        run: gh pr review --approve "$PR_URL"
+        env:
+          PR_URL: ${{ github.event.pull_request.html_url }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Enable auto-merge for patch and minor updates
+        if: steps.metadata.outputs.update-type == 'version-update:semver-patch' || steps.metadata.outputs.update-type == 'version-update:semver-minor'
+        run: gh pr merge --auto --squash "$PR_URL"
+        env:
+          PR_URL: ${{ github.event.pull_request.html_url }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  auto-version-bump:
+    name: Auto Version Bump
+    runs-on: ubuntu-latest
+    if: github.event.pull_request.merged == true && github.actor == 'dependabot[bot]'
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          fetch-depth: 0
+
+      - name: Dependabot metadata
+        id: metadata
+        uses: dependabot/fetch-metadata@v2
+        with:
+          github-token: "${{ secrets.GITHUB_TOKEN }}"
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Bump patch version
+        if: steps.metadata.outputs.update-type == 'version-update:semver-patch'
+        run: |
+          # Get current version
+          CURRENT_VERSION=$(cargo pkgid | cut -d# -f2 | cut -d: -f2)
+          echo "Current version: $CURRENT_VERSION"
+
+          # Bump patch version
+          IFS='.' read -ra VERSION_PARTS <<< "$CURRENT_VERSION"
+          MAJOR=${VERSION_PARTS[0]}
+          MINOR=${VERSION_PARTS[1]}
+          PATCH=${VERSION_PARTS[2]}
+          NEW_PATCH=$((PATCH + 1))
+          NEW_VERSION="$MAJOR.$MINOR.$NEW_PATCH"
+
+          echo "New version: $NEW_VERSION"
+
+          # Update Cargo.toml
+          sed -i "s/version = \"$CURRENT_VERSION\"/version = \"$NEW_VERSION\"/" Cargo.toml
+
+          # Commit changes
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action"
+          git add Cargo.toml
+          git commit -m "bump: patch version to $NEW_VERSION [skip ci]"
+          git push
+
+      - name: Create release tag
+        if: steps.metadata.outputs.update-type == 'version-update:semver-patch' && env.AUTO_RELEASE == 'true'
+        run: |
+          NEW_VERSION=$(cargo pkgid | cut -d# -f2 | cut -d: -f2)
+          git tag -a "v$NEW_VERSION" -m "Auto-release v$NEW_VERSION with dependency updates"
+          git push origin "v$NEW_VERSION"
+        env:
+          AUTO_RELEASE: "false" # Set to 'true' to enable auto-releases for patch updates
+
+  notify-updates:
+    name: Notify Updates
+    runs-on: ubuntu-latest
+    if: github.event.pull_request.merged == true && github.actor == 'dependabot[bot]'
+
+    steps:
+      - name: Comment on PR
+        uses: actions/github-script@v7
+        with:
+          script: |
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: '🤖 **Dependabot Update Merged**\n\n✅ Dependencies have been automatically updated and merged!\n\n📦 The crate may be automatically published if this was a patch update.'
+            })
