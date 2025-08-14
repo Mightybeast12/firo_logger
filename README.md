@@ -399,9 +399,97 @@ cargo run --example performance_test --release
 firo_logger = { version = "0.3.0", default-features = false, features = ["colors"] }
 ```
 
+## Development & Release
+
+### Local Testing
+
+Before pushing changes, run the comprehensive test suite:
+
+```bash
+# Run all CI checks locally
+./test-local.sh
+
+# Individual checks
+cargo fmt -- --check
+cargo clippy --all-features -- -D warnings
+cargo test --all-features
+cargo doc --no-deps --all-features
+```
+
+### Automated Release
+
+The project includes an automated release script that handles version bumping, testing, and publishing:
+
+```bash
+# Interactive mode - asks which increment type
+./release.sh
+
+# Direct version increment
+./release.sh patch   # 1.0.0 → 1.0.1 (bug fixes)
+./release.sh minor   # 1.0.0 → 1.1.0 (new features)
+./release.sh major   # 1.0.0 → 2.0.0 (breaking changes)
+
+# Preview changes without executing
+./release.sh --dry-run
+
+# Show help
+./release.sh --help
+```
+
+#### What the Release Script Does:
+
+1. **🔍 Pre-flight checks:**
+   - Validates git repository state
+   - Ensures on main branch with clean working directory
+   - Verifies remote connectivity
+   - Checks for existing tags
+
+2. **🧪 Quality assurance:**
+   - Runs comprehensive test suite
+   - Validates code formatting and linting
+   - Ensures documentation builds
+
+3. **📝 Version management:**
+   - Updates `Cargo.toml` version
+   - Updates `CHANGELOG.md` with release date
+   - Creates git commit and annotated tag
+
+4. **🚀 Publishing:**
+   - Pushes changes and tags to remote
+   - Triggers GitHub Actions for automated crates.io publishing
+
+#### Safety Features:
+
+- **Error recovery:** Automatically reverts changes if something fails
+- **Confirmation prompts:** Asks before making destructive changes
+- **Comprehensive validation:** Multiple safety checks at each step
+- **Dry-run mode:** Preview all changes before executing
+
+### GitHub Actions CI/CD
+
+The project uses GitHub Actions for continuous integration and deployment:
+
+- **CI Pipeline:** Runs on every push/PR with comprehensive testing
+- **Release Pipeline:** Automatically publishes to crates.io when tags are created
+- **Dependency Updates:** Weekly automated dependency updates with auto-merge
+
+To set up automated publishing:
+1. Get a crates.io API token from [crates.io/settings/tokens](https://crates.io/settings/tokens)
+2. Add it as `CARGO_REGISTRY_TOKEN` in GitHub repo Settings → Secrets → Actions
+
 ## Contributing
 
 Contributions are welcome! Please feel free to submit a Pull Request. For major changes, please open an issue first to discuss what you would like to change.
+
+### Development Workflow:
+
+1. Fork the repository
+2. Create a feature branch (`git checkout -b feature/amazing-feature`)
+3. Make your changes
+4. Run local tests (`./test-local.sh`)
+5. Commit your changes (`git commit -m 'Add amazing feature'`)
+6. Push to the branch (`git push origin feature/amazing-feature`)
+7. Open a Pull Request
 
 ## License
 
