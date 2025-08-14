@@ -9,6 +9,11 @@ on:
 env:
   CARGO_TERM_COLOR: always
 
+permissions:
+  contents: write # To push commits and tags
+  pull-requests: write # To auto-merge PRs
+  actions: read # To read workflow metadata
+
 jobs:
   dependabot-auto-merge:
     name: Auto-merge Dependabot PRs

@@ -8,6 +8,11 @@ on:
 env:
   CARGO_TERM_COLOR: always
 
+permissions:
+  contents: write # To create releases
+  packages: write # If publishing to GitHub packages
+  actions: read
+
 jobs:
   release:
     name: Release

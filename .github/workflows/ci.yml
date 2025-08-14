@@ -9,6 +9,11 @@ on:
 env:
   CARGO_TERM_COLOR: always
 
+permissions:
+  contents: read
+  security-events: write # For audit results
+  actions: read
+
 jobs:
   test:
     name: Test
