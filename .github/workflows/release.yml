@@ -14,46 +14,21 @@ permissions:
   actions: read
 
 jobs:
-  check-ci-status:
-    name: Verify CI Passed
+  wait-for-ci:
     runs-on: ubuntu-latest
     steps:
-      - name: Check CI status for this commit
-        uses: actions/github-script@v7
+      - name: Wait for CI to complete
+        uses: lewagon/wait-on-check-action@v1.3.4
         with:
-          script: |
-            console.log('Checking CI status for commit:', context.sha);
-
-            // Get check runs for this commit
-            const { data: checkRuns } = await github.rest.checks.listForRef({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              ref: context.sha
-            });
-
-            console.log('Found check runs:', checkRuns.check_runs.map(r => `${r.name}: ${r.conclusion}`));
-
-            // Look for our CI workflow (Test job)
-            const ciRun = checkRuns.check_runs.find(run =>
-              run.name === 'Test' && run.head_sha === context.sha
-            );
-
-            if (!ciRun) {
-              core.setFailed('❌ No CI run found for this commit. Please ensure CI has run first.');
-              return;
-            }
-
-            if (ciRun.conclusion !== 'success') {
-              core.setFailed(`❌ CI failed with status: ${ciRun.conclusion}. Cannot proceed with release.`);
-              return;
-            }
-
-            console.log('✅ CI passed successfully for this commit');
+          ref: ${{ github.sha }}
+          check-name: 'ci'
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+          wait-interval: 10
 
   release:
     name: Release to crates.io
     runs-on: ubuntu-latest
-    needs: check-ci-status # Only run if CI check passes
+    needs: wait-for-ci
 
     steps:
       - name: Checkout code
