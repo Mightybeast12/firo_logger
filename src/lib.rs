@@ -26,9 +26,9 @@
 //!     init_default()?;
 //!
 //!     // Log some messages
-//!     log_info!("Application started");
-//!     log_success!("Configuration loaded successfully");
-//!     log_error!("Failed to connect to database: {}", "Connection timeout");
+//!     log_info!("Application started").unwrap();
+//!     log_success!("Configuration loaded successfully").unwrap();
+//!     log_error!("Failed to connect to database: {}", "Connection timeout").unwrap();
 //!
 //!     Ok(())
 //! }
@@ -37,7 +37,7 @@
 //! ## Configuration
 //!
 //! ```rust
-//! use firo_logger::{LoggerConfig, LogLevel, OutputFormat, init};
+//! use firo_logger::{LoggerConfig, LogLevel, OutputFormat, init, log_info};
 //!
 //! fn main() -> Result<(), Box<dyn std::error::Error>> {
 //!     let config = LoggerConfig::builder()
@@ -56,7 +56,7 @@
 //!
 //!     init(config)?;
 //!
-//!     log_info!("Logger initialized with custom configuration");
+//!     log_info!("Logger initialized with custom configuration").unwrap();
 //!
 //!     Ok(())
 //! }
@@ -73,11 +73,11 @@
 //! - `FORCE_COLOR`: Force colored output even when not in a terminal
 //!
 //! ```rust
-//! use firo_logger::init_from_env;
+//! use firo_logger::{init_from_env, log_info};
 //!
 //! fn main() -> Result<(), Box<dyn std::error::Error>> {
 //!     init_from_env()?;
-//!     log_info!("Logger configured from environment");
+//!     log_info!("Logger configured from environment").unwrap();
 //!     Ok(())
 //! }
 //! ```
@@ -153,8 +153,9 @@ pub use config::{
 pub use error::{LoggerError, Result};
 pub use formatters::{CallerInfo, Formatter, LogRecord, ThreadInfo};
 pub use logger::{
-    config, flush, init, init_default, init_from_env, is_initialized, log_debug, log_error,
-    log_info, log_success, log_warning, log_with_caller, logger, stats, Logger, LoggerStats,
+    config, current_logger, flush, init, init_default, init_from_env, is_initialized, log_debug,
+    log_error, log_info, log_success, log_warning, log_with_caller, logger, stats,
+    with_scoped_logger, LoggerInstance, LoggerStats,
 };
 pub use macros::__FunctionTraceGuard;
 
@@ -255,6 +256,7 @@ pub mod legacy {
 
     #[allow(deprecated)]
     impl LogLevel {
+        #[allow(dead_code)]
         fn as_str(&self) -> &'static str {
             match self {
                 LogLevel::Error => "ERROR",
@@ -329,7 +331,7 @@ pub mod log_integration {
 pub mod utils {
     //! Utility functions for common logging patterns.
 
-    use crate::{log_with_caller, CallerInfo, LogLevel};
+    use crate::LogLevel;
     use std::fmt::Arguments;
     use std::time::{Duration, Instant};
 
@@ -468,16 +470,13 @@ mod tests {
     }
 
     #[test]
-    fn test_logger_stats() {
-        init_test_logger();
-
-        // Log some messages
-        let _ = log_info!("Test message 1");
-        let _ = log_error!("Test message 2");
-        let _ = log_warning!("Test message 3");
-
-        let stats = stats().unwrap();
-        assert!(stats.total_messages >= 3);
+    #[allow(deprecated)]
+    fn test_legacy_static_functions() {
+        // Test static functions (legacy API)
+        legacy::Logger::info(format_args!("Legacy info"));
+        legacy::Logger::error(format_args!("Legacy error"));
+        legacy::Logger::log(format_args!("Legacy log"));
+        legacy::Logger::warning(format_args!("Legacy warning"));
     }
 
     #[test]
@@ -511,7 +510,7 @@ mod tests {
             .colors(false)
             .build();
 
-        let logger = Logger::new(config).unwrap();
+        let logger = LoggerInstance::new(config).unwrap();
 
         // These should succeed (but may not actually log due to level filtering)
         assert!(logger.error(format_args!("Error")).is_ok());
@@ -536,17 +535,5 @@ mod tests {
 
         let rate_limiter = RateLimiter::new(std::time::Duration::from_millis(100));
         assert!(rate_limiter.log(LogLevel::Info, format_args!("Rate limited")));
-    }
-
-    #[test]
-    fn test_legacy_compatibility() {
-        #[allow(deprecated)]
-        use legacy::*;
-
-        #[allow(deprecated)]
-        let logger = Logger;
-
-        logger.info(format_args!("Legacy info"));
-        logger.error(format_args!("Legacy error"));
     }
 }

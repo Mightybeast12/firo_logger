@@ -1,7 +1,6 @@
 //! Configuration system for firo_logger.
 
 use crate::error::{LoggerError, Result};
-use chrono::Local;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -457,6 +456,7 @@ impl Colors {
 }
 
 /// Helper to detect if colors should be used in terminal.
+#[allow(dead_code)]
 fn should_use_colors() -> bool {
     std::env::var("NO_COLOR").is_err() && atty::is(atty::Stream::Stdout)
 }

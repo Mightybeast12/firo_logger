@@ -42,7 +42,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("\n=== Testing with file output ===");
 
     // Test with file output
-    let file_config = LoggerConfig::builder()
+    let _file_config = LoggerConfig::builder()
         .level(LogLevel::Info)
         .console(true)
         .file("example.log")

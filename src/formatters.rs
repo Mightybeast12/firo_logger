@@ -2,7 +2,7 @@
 
 use crate::config::{Colors, LogLevel, OutputFormat};
 use chrono::{DateTime, Local};
-use serde_json::{json, Value};
+use serde_json::json;
 use std::collections::HashMap;
 use std::fmt::Arguments;
 
@@ -90,6 +90,25 @@ impl LogRecord {
     }
 }
 
+/// Helper function to center text within a given width.
+fn center_text(text: &str, width: usize) -> String {
+    let text_len = text.len();
+    if text_len >= width {
+        return text.to_string();
+    }
+
+    let padding = width - text_len;
+    let left_padding = padding / 2;
+    let right_padding = padding - left_padding;
+
+    format!(
+        "{}{}{}",
+        " ".repeat(left_padding),
+        text,
+        " ".repeat(right_padding)
+    )
+}
+
 /// Trait for formatting log records.
 pub trait Formatter: Send + Sync {
     /// Formats a log record into a string.
@@ -171,9 +190,10 @@ impl Formatter for TextFormatter {
 
         let level_str = if self.colors {
             let color = Colors::for_level(record.level);
-            format!("{}{:>7}{}", color, record.level.as_str(), Colors::RESET)
+            let centered = center_text(record.level.as_str(), 7);
+            format!("{}{}{}", color, centered, Colors::RESET)
         } else {
-            format!("{:>7}", record.level.as_str())
+            center_text(record.level.as_str(), 7)
         };
 
         let mut parts = vec![format!("{}", timestamp), format!("[{}]:", level_str)];
@@ -501,7 +521,7 @@ mod tests {
         let record = LogRecord::new(LogLevel::Info, format_args!("Test message"));
 
         let output = formatter.format(&record);
-        assert!(output.contains("[   INFO]:"));
+        assert!(output.contains("[ INFO  ]:"));
         assert!(output.contains("Test message"));
     }
 
@@ -511,7 +531,7 @@ mod tests {
         let record = LogRecord::new(LogLevel::Error, format_args!("Error message"));
 
         let output = formatter.format(&record);
-        let parsed: Value = serde_json::from_str(&output).unwrap();
+        let parsed: serde_json::Value = serde_json::from_str(&output).unwrap();
 
         assert_eq!(parsed["level"], "ERROR");
         assert_eq!(parsed["message"], "Error message");

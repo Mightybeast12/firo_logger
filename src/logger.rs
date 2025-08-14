@@ -1,4 +1,4 @@
-//! Core logger implementation with async support.
+//! Core logger implementation with async support and dual singleton/instance pattern.
 
 use crate::config::{LogLevel, LoggerConfig};
 use crate::error::{LoggerError, Result};
@@ -8,6 +8,7 @@ use crate::writers::{ConsoleWriter, FileWriter, MultiWriter, Writer};
 use crossbeam_channel::{unbounded, Receiver, Sender};
 use once_cell::sync::OnceCell;
 use parking_lot::{Mutex, RwLock};
+use std::cell::RefCell;
 use std::collections::HashMap;
 use std::fmt::Arguments;
 use std::sync::Arc;
@@ -15,19 +16,69 @@ use std::thread::{self, JoinHandle};
 use std::time::{Duration, SystemTime};
 
 /// Global logger instance.
-static LOGGER: OnceCell<Arc<Logger>> = OnceCell::new();
+static GLOBAL_LOGGER: OnceCell<Arc<LoggerInstance>> = OnceCell::new();
+
+// Thread-local logger storage for scoped logging.
+thread_local! {
+    static THREAD_LOCAL_LOGGER: RefCell<Option<Arc<LoggerInstance>>> = RefCell::new(None);
+}
+
+/// Sets a scoped logger for the current thread.
+pub fn with_scoped_logger<F, R>(logger: Arc<LoggerInstance>, f: F) -> R
+where
+    F: FnOnce() -> R,
+{
+    THREAD_LOCAL_LOGGER.with(|tl| {
+        let previous = tl.replace(Some(logger));
+        let result = f();
+        tl.replace(previous);
+        result
+    })
+}
+
+/// Gets the current logger (thread-local first, then global, then auto-initialize).
+pub fn current_logger() -> Result<Arc<LoggerInstance>> {
+    // First check for thread-local logger
+    THREAD_LOCAL_LOGGER.with(|tl| {
+        if let Some(logger) = tl.borrow().as_ref() {
+            return Ok(Arc::clone(logger));
+        }
+
+        // Fall back to global logger
+        if let Some(logger) = GLOBAL_LOGGER.get() {
+            return Ok(Arc::clone(logger));
+        }
+
+        // If no logger is available, try to initialize a default one
+        // This provides backward compatibility for tests and simple usage
+        if let Ok(()) = init_default() {
+            // If initialization succeeded, get the global logger
+            return Ok(Arc::clone(GLOBAL_LOGGER.get().unwrap()));
+        }
+
+        // If initialization failed (already initialized by another thread), try again
+        if let Some(logger) = GLOBAL_LOGGER.get() {
+            return Ok(Arc::clone(logger));
+        }
+
+        Err(LoggerError::NotInitialized)
+    })
+}
 
 /// Async log message for the background thread.
 #[cfg(feature = "async")]
 #[derive(Debug)]
 struct AsyncLogMessage {
     record: LogRecord,
+    #[allow(dead_code)]
     caller: Option<CallerInfo>,
+    #[allow(dead_code)]
     module: Option<String>,
 }
 
-/// The main logger structure.
-pub struct Logger {
+/// The main logger instance structure.
+/// Each instance is independent and can have its own configuration.
+pub struct LoggerInstance {
     /// Logger configuration
     config: RwLock<LoggerConfig>,
     /// Writer for output
@@ -55,7 +106,7 @@ pub struct LoggerStats {
     pub error_count: u64,
 }
 
-impl Logger {
+impl LoggerInstance {
     /// Creates a new logger with the given configuration.
     pub fn new(config: LoggerConfig) -> Result<Self> {
         config.validate()?;
@@ -135,7 +186,7 @@ impl Logger {
         let mut stats = LoggerStats::default();
         stats.start_time = Some(SystemTime::now());
 
-        Ok(Logger {
+        Ok(LoggerInstance {
             config: RwLock::new(config),
             writer: Mutex::new(Box::new(multi_writer)),
             #[cfg(feature = "async")]
@@ -387,7 +438,7 @@ impl Logger {
     }
 }
 
-impl Drop for Logger {
+impl Drop for LoggerInstance {
     fn drop(&mut self) {
         // Flush any remaining logs
         let _ = self.flush();
@@ -395,15 +446,15 @@ impl Drop for Logger {
         // Close async channel if it exists
         #[cfg(feature = "async")]
         if let Some(sender) = &self.async_sender {
-            drop(sender);
+            let _ = sender;
         }
     }
 }
 
 /// Initializes the global logger with the given configuration.
 pub fn init(config: LoggerConfig) -> Result<()> {
-    let logger = Arc::new(Logger::new(config)?);
-    LOGGER
+    let logger = Arc::new(LoggerInstance::new(config)?);
+    GLOBAL_LOGGER
         .set(logger)
         .map_err(|_| LoggerError::AlreadyInitialized)?;
     Ok(())
@@ -420,63 +471,63 @@ pub fn init_from_env() -> Result<()> {
 }
 
 /// Gets the global logger instance.
-pub fn logger() -> Result<&'static Arc<Logger>> {
-    LOGGER.get().ok_or(LoggerError::NotInitialized)
+pub fn logger() -> Result<&'static Arc<LoggerInstance>> {
+    GLOBAL_LOGGER.get().ok_or(LoggerError::NotInitialized)
 }
 
 /// Checks if the logger is initialized.
 pub fn is_initialized() -> bool {
-    LOGGER.get().is_some()
+    GLOBAL_LOGGER.get().is_some()
 }
 
-/// Logs an error message using the global logger.
+/// Logs an error message using the current logger (scoped or global).
 pub fn log_error(args: Arguments) -> Result<()> {
-    logger()?.error(args)
+    current_logger()?.error(args)
 }
 
-/// Logs a warning message using the global logger.
+/// Logs a warning message using the current logger (scoped or global).
 pub fn log_warning(args: Arguments) -> Result<()> {
-    logger()?.warning(args)
+    current_logger()?.warning(args)
 }
 
-/// Logs an info message using the global logger.
+/// Logs an info message using the current logger (scoped or global).
 pub fn log_info(args: Arguments) -> Result<()> {
-    logger()?.info(args)
+    current_logger()?.info(args)
 }
 
-/// Logs a success message using the global logger.
+/// Logs a success message using the current logger (scoped or global).
 pub fn log_success(args: Arguments) -> Result<()> {
-    logger()?.success(args)
+    current_logger()?.success(args)
 }
 
-/// Logs a debug message using the global logger.
+/// Logs a debug message using the current logger (scoped or global).
 pub fn log_debug(args: Arguments) -> Result<()> {
-    logger()?.debug(args)
+    current_logger()?.debug(args)
 }
 
-/// Logs a message with caller information using the global logger.
+/// Logs a message with caller information using the current logger (scoped or global).
 pub fn log_with_caller(
     level: LogLevel,
     args: Arguments,
     caller: Option<CallerInfo>,
     module: Option<&str>,
 ) -> Result<()> {
-    logger()?.log_with_caller(level, args, caller, module)
+    current_logger()?.log_with_caller(level, args, caller, module)
 }
 
-/// Flushes the global logger.
+/// Flushes the current logger (scoped or global).
 pub fn flush() -> Result<()> {
-    logger()?.flush()
+    current_logger()?.flush()
 }
 
-/// Gets the global logger configuration.
+/// Gets the current logger configuration (scoped or global).
 pub fn config() -> Result<LoggerConfig> {
-    Ok(logger()?.config())
+    Ok(current_logger()?.config())
 }
 
-/// Gets the global logger statistics.
+/// Gets the current logger statistics (scoped or global).
 pub fn stats() -> Result<LoggerStats> {
-    Ok(logger()?.stats())
+    Ok(current_logger()?.stats())
 }
 
 /// Convenience functions for common log levels with automatic caller detection.
@@ -498,14 +549,12 @@ pub fn __log_with_location(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::sync::atomic::{AtomicUsize, Ordering};
-    use std::sync::Arc;
     use tempfile::NamedTempFile;
 
     #[test]
     fn test_logger_creation() {
         let config = LoggerConfig::default();
-        let logger = Logger::new(config).unwrap();
+        let logger = LoggerInstance::new(config).unwrap();
 
         assert!(logger.info(format_args!("Test message")).is_ok());
         assert!(logger.flush().is_ok());
@@ -535,7 +584,7 @@ mod tests {
             .colors(false)
             .build();
 
-        let logger = Logger::new(config)?;
+        let logger = LoggerInstance::new(config)?;
 
         // Should log error and warning
         assert!(logger.error(format_args!("Error message")).is_ok());
@@ -557,7 +606,7 @@ mod tests {
             .file(temp_file.path())
             .build();
 
-        let logger = Logger::new(config)?;
+        let logger = LoggerInstance::new(config)?;
         logger.info(format_args!("File test message"))?;
         logger.flush()?;
 
@@ -575,7 +624,7 @@ mod tests {
             .async_logging(100)
             .build();
 
-        let logger = Logger::new(config)?;
+        let logger = LoggerInstance::new(config)?;
 
         // Log several messages
         for i in 0..10 {
@@ -592,7 +641,7 @@ mod tests {
     fn test_logger_stats() -> Result<()> {
         let config = LoggerConfig::builder().console(true).colors(false).build();
 
-        let logger = Logger::new(config)?;
+        let logger = LoggerInstance::new(config)?;
 
         logger.error(format_args!("Error"))?;
         logger.warning(format_args!("Warning"))?;
@@ -620,7 +669,7 @@ mod tests {
             .module_filters
             .insert("test_module".to_string(), LogLevel::Debug);
 
-        let logger = Logger::new(config)?;
+        let logger = LoggerInstance::new(config)?;
 
         // Should log debug for specific module
         assert!(logger

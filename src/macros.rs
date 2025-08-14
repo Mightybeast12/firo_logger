@@ -7,8 +7,8 @@
 /// ```
 /// use firo_logger::log_error;
 ///
-/// log_error!("This is an error message");
-/// log_error!("Error processing user {}: {}", user_id, error);
+/// log_error!("This is an error message").unwrap();
+/// log_error!("Error processing user {}: {}", 123, "file not found").unwrap();
 /// ```
 #[macro_export]
 macro_rules! log_error {
@@ -30,8 +30,8 @@ macro_rules! log_error {
 /// ```
 /// use firo_logger::log_warning;
 ///
-/// log_warning!("This is a warning message");
-/// log_warning!("Warning: {} attempts remaining", attempts);
+/// log_warning!("This is a warning message").unwrap();
+/// log_warning!("Warning: {} attempts remaining", 3).unwrap();
 /// ```
 #[macro_export]
 macro_rules! log_warning {
@@ -53,8 +53,8 @@ macro_rules! log_warning {
 /// ```
 /// use firo_logger::log_info;
 ///
-/// log_info!("Application started");
-/// log_info!("Processing {} items", item_count);
+/// log_info!("Application started").unwrap();
+/// log_info!("Processing {} items", 42).unwrap();
 /// ```
 #[macro_export]
 macro_rules! log_info {
@@ -76,8 +76,8 @@ macro_rules! log_info {
 /// ```
 /// use firo_logger::log_success;
 ///
-/// log_success!("Operation completed successfully");
-/// log_success!("Successfully processed {} records", count);
+/// log_success!("Operation completed successfully").unwrap();
+/// log_success!("Successfully processed {} records", 100).unwrap();
 /// ```
 #[macro_export]
 macro_rules! log_success {
@@ -99,8 +99,8 @@ macro_rules! log_success {
 /// ```
 /// use firo_logger::log_debug;
 ///
-/// log_debug!("Debug information");
-/// log_debug!("Variable value: {:?}", some_variable);
+/// log_debug!("Debug information").unwrap();
+/// log_debug!("Variable value: {:?}", vec![1, 2, 3]).unwrap();
 /// ```
 #[macro_export]
 macro_rules! log_debug {
@@ -122,8 +122,8 @@ macro_rules! log_debug {
 /// ```
 /// use firo_logger::{log, LogLevel};
 ///
-/// log!(LogLevel::Error, "This is an error");
-/// log!(LogLevel::Info, "User {} logged in", username);
+/// log!(LogLevel::Error, "This is an error").unwrap();
+/// log!(LogLevel::Info, "User {} logged in", "alice").unwrap();
 /// ```
 #[macro_export]
 macro_rules! log {
@@ -159,38 +159,20 @@ macro_rules! log {
 macro_rules! log_with_metadata {
     ($level:expr, $message:expr, $($key:expr => $value:expr),+ $(,)?) => {
         {
-            use $crate::formatters::LogRecord;
-            use $crate::formatters::CallerInfo;
-
-            let caller = CallerInfo {
-                file: file!(),
-                line: line!(),
-                module: Some(module_path!()),
-            };
-
-            let mut record = LogRecord::new($level, format_args!("{}", $message));
-            record = record.with_module(module_path!());
-            record = record.with_caller(caller);
-
+            // Use the standard logging function but with a formatted message that includes metadata
+            let mut metadata_parts = Vec::new();
             $(
-                record = record.with_metadata($key, $value);
+                metadata_parts.push(format!("{}={}", $key, $value));
             )+
+            let metadata_str = metadata_parts.join(" ");
 
-            if let Ok(logger) = $crate::logger::logger() {
-                let config = logger.config();
-                let formatter = $crate::formatters::create_formatter(
-                    config.format,
-                    config.console.colors,
-                    &config.datetime_format,
-                    config.include_caller,
-                    config.include_thread,
-                    true,
-                );
-                let formatted = formatter.format(&record);
-
-                let mut writer = logger.writer.lock();
-                let _ = writer.write(&record, &formatted);
-            }
+            $crate::logger::__log_with_location(
+                $level,
+                format_args!("{} [{}]", $message, metadata_str),
+                file!(),
+                line!(),
+                Some(module_path!())
+            )
         }
     };
 }
@@ -205,32 +187,32 @@ macro_rules! log_with_metadata {
 /// let debug_mode = true;
 /// log_if!(debug_mode, LogLevel::Debug, "Debug mode is enabled");
 ///
-/// let error_occurred = check_for_errors();
+/// let error_occurred = true;
 /// log_if!(error_occurred, LogLevel::Error, "An error occurred during processing");
 /// ```
 #[macro_export]
 macro_rules! log_if {
     ($condition:expr, $level:expr, $($arg:tt)*) => {
         if $condition {
-            $crate::log!($level, $($arg)*);
+            let _ = $crate::log!($level, $($arg)*);
         }
     };
 }
 
-/// Logs an error and returns early with the error.
+/// Logs an error and returns the error for further handling.
 ///
 /// This is useful for error handling where you want to log the error
-/// and return it at the same time.
+/// and then return it or convert it.
 ///
 /// # Examples
 ///
 /// ```
 /// use firo_logger::log_error_and_return;
 ///
-/// fn process_file(path: &str) -> Result<(), Box<dyn std::error::Error>> {
-///     let file = std::fs::File::open(path)
-///         .map_err(|e| log_error_and_return!("Failed to open file {}: {}", path, e))?;
-///     // ... rest of processing
+/// fn process_file(path: &str) -> std::io::Result<()> {
+///     if !std::path::Path::new(path).exists() {
+///         return Err(log_error_and_return!("File not found: {}", path));
+///     }
 ///     Ok(())
 /// }
 /// ```
@@ -239,7 +221,7 @@ macro_rules! log_error_and_return {
     ($($arg:tt)*) => {
         {
             let _ = $crate::log_error!($($arg)*);
-            return Err($crate::error::LoggerError::Custom(format!($($arg)*)).into());
+            std::io::Error::new(std::io::ErrorKind::Other, format!($($arg)*))
         }
     };
 }
@@ -459,7 +441,8 @@ mod tests {
     fn test_basic_logging_macros() {
         let config = LoggerConfig::builder().console(true).colors(false).build();
 
-        logger::init(config).unwrap();
+        // Handle the case where logger is already initialized
+        let _ = logger::init(config);
 
         // Test all basic logging macros
         assert!(log_error!("Test error message").is_ok());
@@ -473,7 +456,7 @@ mod tests {
     fn test_log_macro_with_level() {
         let config = LoggerConfig::builder().console(true).colors(false).build();
 
-        logger::init(config).unwrap();
+        let _ = logger::init(config);
 
         assert!(log!(LogLevel::Error, "Custom level message").is_ok());
         assert!(log!(LogLevel::Info, "User {} logged in", "alice").is_ok());
@@ -483,7 +466,7 @@ mod tests {
     fn test_conditional_logging() {
         let config = LoggerConfig::builder().console(true).colors(false).build();
 
-        logger::init(config).unwrap();
+        let _ = logger::init(config);
 
         let debug_enabled = true;
         let debug_disabled = false;
@@ -499,7 +482,7 @@ mod tests {
     fn test_time_block_macro() {
         let config = LoggerConfig::builder().console(true).colors(false).build();
 
-        logger::init(config).unwrap();
+        let _ = logger::init(config);
 
         let result = time_block!(LogLevel::Info, "Test operation", {
             std::thread::sleep(Duration::from_millis(10));
@@ -513,7 +496,7 @@ mod tests {
     fn test_log_once_macro() {
         let config = LoggerConfig::builder().console(true).colors(false).build();
 
-        logger::init(config).unwrap();
+        let _ = logger::init(config);
 
         // This should only log once despite being called multiple times
         for _ in 0..5 {
@@ -525,7 +508,7 @@ mod tests {
     fn test_log_at_most_macro() {
         let config = LoggerConfig::builder().console(true).colors(false).build();
 
-        logger::init(config).unwrap();
+        let _ = logger::init(config);
 
         // This should only log 3 times despite being called 10 times
         for i in 0..10 {
@@ -541,7 +524,7 @@ mod tests {
             .level(LogLevel::Debug)
             .build();
 
-        logger::init(config).unwrap();
+        let _ = logger::init(config);
 
         fn test_function(x: i32, y: i32) -> i32 {
             trace_function!("test_function", x, y);

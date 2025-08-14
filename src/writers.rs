@@ -3,10 +3,10 @@
 use crate::config::{FileConfig, LogLevel, RotationConfig, RotationFrequency};
 use crate::error::{LoggerError, Result};
 use crate::formatters::{Formatter, LogRecord};
-use chrono::{DateTime, Datelike, Local, Weekday};
+use chrono::{DateTime, Datelike, Local};
 use std::fs::{File, OpenOptions};
 use std::io::{BufWriter, Write};
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -19,7 +19,7 @@ pub trait Writer: Send + Sync {
     fn flush(&mut self) -> Result<()>;
 
     /// Returns whether this writer should be used for the given log level.
-    fn should_write(&self, level: LogLevel) -> bool {
+    fn should_write(&self, _level: LogLevel) -> bool {
         true // Default: write all levels
     }
 }
@@ -29,6 +29,7 @@ pub struct ConsoleWriter {
     /// Whether to use stderr for error/warning levels
     use_stderr: bool,
     /// Formatter for this writer
+    #[allow(dead_code)]
     formatter: Box<dyn Formatter>,
 }
 
@@ -86,6 +87,7 @@ pub struct FileWriter {
     /// Last rotation check time
     last_rotation_check: SystemTime,
     /// Formatter for this writer
+    #[allow(dead_code)]
     formatter: Box<dyn Formatter>,
 }
 
@@ -320,7 +322,7 @@ impl FileWriter {
 }
 
 impl Writer for FileWriter {
-    fn write(&mut self, record: &LogRecord, formatted: &str) -> Result<()> {
+    fn write(&mut self, _record: &LogRecord, formatted: &str) -> Result<()> {
         // Check for rotation before writing
         self.check_and_rotate()?;
 
