@@ -246,10 +246,18 @@ run_preflight_checks() {
 
         # Check if we're up to date with remote
         git fetch origin "$MAIN_BRANCH" --quiet
-        if [ "$(git rev-parse HEAD)" != "$(git rev-parse "origin/$MAIN_BRANCH")" ]; then
-            print_error "Local branch is not up to date with origin/$MAIN_BRANCH"
-            print_info "Fix: git pull origin $MAIN_BRANCH"
-            exit 1
+        local local_commit=$(git rev-parse HEAD)
+        local remote_commit=$(git rev-parse "origin/$MAIN_BRANCH")
+        
+        if [ "$local_commit" != "$remote_commit" ]; then
+            # Check if local is behind remote (need to pull)
+            if git merge-base --is-ancestor "$local_commit" "$remote_commit"; then
+                print_error "Local branch is behind origin/$MAIN_BRANCH"
+                print_info "Fix: git pull origin $MAIN_BRANCH"
+                exit 1
+            fi
+            # Local is ahead of remote - will push during release
+            print_info "Local branch has unpushed commits - will push during release"
         fi
     else
         print_info "Skipping remote checks in dry-run mode"
