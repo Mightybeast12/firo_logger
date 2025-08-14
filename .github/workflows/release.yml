@@ -16,14 +16,32 @@ permissions:
 jobs:
   wait-for-ci:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
-      - name: Wait for CI to complete
+      - name: Wait for Quick Check to complete
+        uses: lewagon/wait-on-check-action@v1.3.4
+        with:
+          ref: ${{ github.sha }}
+          check-name: "Quick Check"
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+          wait-interval: 10
+
+      - name: Wait for Format & Lint to complete
+        uses: lewagon/wait-on-check-action@v1.3.4
+        with:
+          ref: ${{ github.sha }}
+          check-name: "Format & Lint"
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+          wait-interval: 10
+
+      - name: Wait for Test & Coverage to complete
         uses: lewagon/wait-on-check-action@v1.3.4
         with:
           ref: ${{ github.sha }}
           check-name: "Test & Coverage"
           repo-token: ${{ secrets.GITHUB_TOKEN }}
           wait-interval: 10
+          allowed-conclusions: success,skipped
 
   release:
     name: Release to crates.io
