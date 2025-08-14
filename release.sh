@@ -83,6 +83,14 @@ cleanup_on_error() {
         if git log --oneline -1 | grep -q "chore: release v"; then
             print_info "Reverting release commit..."
             git reset --hard HEAD~1 2>/dev/null || true
+        else
+            # If no commit was made but files were modified, revert them
+            if git diff --quiet HEAD -- "$CARGO_TOML" "$CHANGELOG" 2>/dev/null; then
+                : # No changes to revert
+            else
+                print_info "Reverting file changes..."
+                git checkout HEAD -- "$CARGO_TOML" "$CHANGELOG" 2>/dev/null || true
+            fi
         fi
 
         # Remove any tags we might have created
@@ -424,13 +432,13 @@ main() {
     # Show summary and confirm
     confirm_release "$current_version" "$new_version" "$increment_type"
 
-    # Run tests
-    run_tests
-
-    # Update files
+    # Update version files BEFORE running tests
     print_step "Updating version files..."
     update_cargo_version "$new_version"
     update_changelog "$new_version"
+
+    # Run tests with updated version
+    run_tests
 
     # Create release
     create_release "$new_version"
