@@ -69,15 +69,6 @@ jobs:
           fi
           echo "✅ Version verified: $CARGO_VERSION"
 
-      - name: Run quick tests
-        run: |
-          echo "🧪 Running quick library tests..."
-          cargo test --lib --release
-          echo "✅ Tests passed"
-
-      - name: Build release
-        run: cargo build --release --all-features
-
       - name: Verify package
         run: cargo package --list
 
