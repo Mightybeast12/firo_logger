@@ -1,7 +1,7 @@
 #!/bin/bash
 
-# Release script for firo_logger with comprehensive error handling
-# Usage: ./release.sh [patch|minor|major|--dry-run|--help]
+# Release script for firo_logger - reads version from Cargo.toml
+# Usage: ./release.sh [--dry-run|--help]
 
 set -e  # Exit on any error
 set -u  # Exit on undefined variables
@@ -48,20 +48,22 @@ show_help() {
 🚀 Release Script for firo_logger
 
 Usage:
-    ./release.sh                    Interactive mode (asks for version increment)
-    ./release.sh patch              Increment patch version (1.0.0 → 1.0.1)
-    ./release.sh minor              Increment minor version (1.0.0 → 1.1.0)
-    ./release.sh major              Increment major version (1.0.0 → 2.0.0)
+    ./release.sh                    Release using version from Cargo.toml
     ./release.sh --dry-run          Preview changes without executing
     ./release.sh --help             Show this help message
 
 What this script does:
 1. ✅ Runs comprehensive pre-flight checks
-2. 📝 Updates version in Cargo.toml
-3. 📋 Updates CHANGELOG.md
-4. 🧪 Runs full test suite
-5. 📦 Creates git commit and tag
-6. 🚀 Pushes to remote repository
+2. 📝 Reads version from Cargo.toml
+3. 📋 Updates CHANGELOG.md with current date
+4. 💾 Commits changes to Cargo.toml and CHANGELOG.md
+5. 🧪 Runs full test suite
+6. 📦 Creates git tag
+7. 🚀 Pushes to remote repository
+
+Important:
+- Update the version in Cargo.toml BEFORE running this script
+- The script will commit any uncommitted Cargo.toml changes
 
 Safety features:
 - Validates git repository state
@@ -94,8 +96,8 @@ cleanup_on_error() {
         fi
 
         # Remove any tags we might have created
-        if [ -n "${NEW_VERSION:-}" ]; then
-            git tag -d "v$NEW_VERSION" 2>/dev/null || true
+        if [ -n "${VERSION:-}" ]; then
+            git tag -d "v$VERSION" 2>/dev/null || true
         fi
 
         print_error "Release aborted. Repository state restored."
@@ -121,60 +123,13 @@ get_current_version() {
     grep '^version' "$CARGO_TOML" | cut -d'"' -f2 | head -1
 }
 
-# Function to increment version
-increment_version() {
-    local version=$1
-    local increment_type=$2
-
-    local major minor patch
-    IFS='.' read -r major minor patch <<< "$version"
-
-    case $increment_type in
-        major)
-            echo "$((major + 1)).0.0"
-            ;;
-        minor)
-            echo "${major}.$((minor + 1)).0"
-            ;;
-        patch)
-            echo "${major}.${minor}.$((patch + 1))"
-            ;;
-        *)
-            print_error "Invalid increment type: $increment_type"
-            exit 1
-            ;;
-    esac
-}
-
-# Function to update version in Cargo.toml
-update_cargo_version() {
-    local new_version=$1
-
-    if [ "$DRY_RUN" = "true" ]; then
-        print_info "Would update Cargo.toml version to $new_version"
-        return
-    fi
-
-    if command_exists sed; then
-        # Use different sed syntax for macOS vs Linux
-        if [[ "$OSTYPE" == "darwin"* ]]; then
-            sed -i '' "s/^version = \"[^\"]*\"/version = \"$new_version\"/" "$CARGO_TOML"
-        else
-            sed -i "s/^version = \"[^\"]*\"/version = \"$new_version\"/" "$CARGO_TOML"
-        fi
-    else
-        print_error "sed command not found"
-        exit 1
-    fi
-}
-
 # Function to update CHANGELOG.md
 update_changelog() {
-    local new_version=$1
+    local version=$1
     local current_date=$(date '+%Y-%m-%d')
 
     if [ "$DRY_RUN" = "true" ]; then
-        print_info "Would update CHANGELOG.md for version $new_version"
+        print_info "Would update CHANGELOG.md for version $version"
         return
     fi
 
@@ -183,13 +138,13 @@ update_changelog() {
         return
     fi
 
-    # Replace "## [Unreleased]" with "## [Unreleased]\n\n## [$new_version] - $current_date"
+    # Replace "## [Unreleased]" with "## [Unreleased]\n\n## [$version] - $current_date"
     if [[ "$OSTYPE" == "darwin"* ]]; then
         sed -i '' "s/## \[Unreleased\]/## [Unreleased]\
 \
-## [$new_version] - $current_date/" "$CHANGELOG"
+## [$version] - $current_date/" "$CHANGELOG"
     else
-        sed -i "s/## \[Unreleased\]/## [Unreleased]\n\n## [$new_version] - $current_date/" "$CHANGELOG"
+        sed -i "s/## \[Unreleased\]/## [Unreleased]\n\n## [$version] - $current_date/" "$CHANGELOG"
     fi
 }
 
@@ -221,19 +176,6 @@ run_preflight_checks() {
         print_error "Not on $MAIN_BRANCH branch (currently on: $current_branch)"
         print_info "Fix: git checkout $MAIN_BRANCH"
         exit 1
-    fi
-
-    # Check for uncommitted changes (skip in dry-run mode)
-    if ! git diff-index --quiet HEAD --; then
-        if [ "$DRY_RUN" = "false" ]; then
-            print_error "Uncommitted changes detected"
-            print_info "Fix: git add . && git commit -m 'your message' OR git stash"
-            git status --short
-            exit 1
-        else
-            print_warning "Uncommitted changes detected (allowed in dry-run mode)"
-            git status --short
-        fi
     fi
 
     # Check if we can reach the remote (skip in dry-run mode)
@@ -340,46 +282,16 @@ handle_existing_tag() {
     print_success "Stale tag cleaned up, continuing with release"
 }
 
-# Function to get increment type interactively
-get_increment_type_interactive() {
-    local current_version=$1
-
-    printf "\n"
-    printf "${CYAN}🚀 Release Script for firo_logger${NC}\n"
-    printf "${BLUE}Current version: $current_version${NC}\n"
-    printf "\n"
-    printf "How would you like to increment the version?\n"
-    printf "1) Patch ($current_version → $(increment_version "$current_version" "patch")) - Bug fixes\n"
-    printf "2) Minor ($current_version → $(increment_version "$current_version" "minor")) - New features\n"
-    printf "3) Major ($current_version → $(increment_version "$current_version" "major")) - Breaking changes\n"
-    printf "4) Cancel\n"
-    printf "\n"
-
-    while true; do
-        printf "Select (1-4): "
-        read choice
-        case $choice in
-            1) echo "patch"; break ;;
-            2) echo "minor"; break ;;
-            3) echo "major"; break ;;
-            4) print_info "Release cancelled"; exit 0 ;;
-            *) printf "Please select 1-4\n" ;;
-        esac
-    done
-}
-
 # Function to show release summary and confirm
 confirm_release() {
-    local current_version=$1
-    local new_version=$2
-    local increment_type=$3
+    local version=$1
 
     echo
     echo -e "${CYAN}📋 Release Summary:${NC}"
-    echo "- Current version: $current_version"
-    echo "- New version: $new_version ($increment_type increment)"
-    echo "- Files to update: $CARGO_TOML, $CHANGELOG"
-    echo "- Tag to create: v$new_version"
+    echo "- Version: $version (from Cargo.toml)"
+    echo "- Files to update: $CHANGELOG"
+    echo "- Files to commit: $CARGO_TOML, $CHANGELOG"
+    echo "- Tag to create: v$version"
     echo "- Branch: $MAIN_BRANCH"
     echo
 
@@ -401,10 +313,33 @@ confirm_release() {
     done
 }
 
+# Function to commit changes
+commit_changes() {
+    local version=$1
+
+    if [ "$DRY_RUN" = "true" ]; then
+        print_info "Would add and commit: $CARGO_TOML $CHANGELOG"
+        return
+    fi
+
+    print_step "Committing version changes..."
+
+    # Add both files (in case Cargo.toml has uncommitted changes)
+    git add "$CARGO_TOML" "$CHANGELOG"
+
+    # Check if there are changes to commit
+    if git diff --cached --quiet; then
+        print_warning "No changes to commit"
+    else
+        git commit -m "chore: release v$version"
+        print_success "Changes committed"
+    fi
+}
+
 # Function to create tag and push
 create_tag_and_push() {
-    local new_version=$1
-    local tag="v$new_version"
+    local version=$1
+    local tag="v$version"
 
     if [ "$DRY_RUN" = "true" ]; then
         print_info "Would create tag: $tag"
@@ -431,8 +366,6 @@ create_tag_and_push() {
 
 # Main function
 main() {
-    local increment_type=""
-
     # Parse command line arguments
     while [[ $# -gt 0 ]]; do
         case $1 in
@@ -445,10 +378,6 @@ main() {
                 print_info "Running in DRY RUN mode"
                 shift
                 ;;
-            patch|minor|major)
-                increment_type="$1"
-                shift
-                ;;
             *)
                 print_error "Unknown argument: $1"
                 echo "Use --help for usage information"
@@ -457,44 +386,33 @@ main() {
         esac
     done
 
-    # Store current version
-    local current_version=$(get_current_version)
+    # Get version from Cargo.toml
+    local version=$(get_current_version)
+    VERSION="$version"  # Store for cleanup function
+
+    print_step "Preparing release for firo_logger v$version"
 
     # Run pre-flight checks
     run_preflight_checks
 
-    # Get increment type if not provided
-    if [ -z "$increment_type" ]; then
-        increment_type=$(get_increment_type_interactive "$current_version")
-    fi
-
-    # Calculate new version
-    local new_version=$(increment_version "$current_version" "$increment_type")
-    NEW_VERSION="$new_version"  # Store for cleanup function
-
     # Handle existing tag (remove if exists)
-    handle_existing_tag "$new_version"
+    handle_existing_tag "$version"
 
     # Show summary and confirm
-    confirm_release "$current_version" "$new_version" "$increment_type"
+    confirm_release "$version"
 
-    # Update version files and commit BEFORE running tests
-    print_step "Updating version files..."
-    update_cargo_version "$new_version"
-    update_changelog "$new_version"
+    # Update changelog
+    print_step "Updating CHANGELOG.md..."
+    update_changelog "$version"
 
-    # Commit changes before running tests (needed for cargo package)
-    if [ "$DRY_RUN" = "false" ]; then
-        print_step "Committing version changes..."
-        git add "$CARGO_TOML" "$CHANGELOG"
-        git commit -m "chore: release v$new_version"
-    fi
+    # Commit changes (both Cargo.toml and CHANGELOG.md)
+    commit_changes "$version"
 
     # Run tests with updated and committed version
     run_tests
 
     # Create tag and push
-    create_tag_and_push "$new_version"
+    create_tag_and_push "$version"
 }
 
 # Run main function with all arguments
