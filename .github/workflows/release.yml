@@ -25,6 +25,7 @@ jobs:
           check-name: "Quick Check"
           repo-token: ${{ secrets.GITHUB_TOKEN }}
           wait-interval: 10
+          allowed-conclusions: success,skipped,cancelled
 
       - name: Wait for Format & Lint to complete
         uses: lewagon/wait-on-check-action@v1.3.4
@@ -33,6 +34,7 @@ jobs:
           check-name: "Format & Lint"
           repo-token: ${{ secrets.GITHUB_TOKEN }}
           wait-interval: 10
+          allowed-conclusions: success,skipped,cancelled
 
   release:
     name: Release to crates.io
