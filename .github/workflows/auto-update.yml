@@ -1,18 +1,15 @@
-name: Auto Update Dependencies
+name: Dependabot Auto-Merge
 
 on:
   pull_request:
-    types: [opened, synchronize]
-  pull_request_target:
     types: [opened, synchronize]
 
 env:
   CARGO_TERM_COLOR: always
 
 permissions:
-  contents: write # To push commits and tags
-  pull-requests: write # To auto-merge PRs
-  actions: read # To read workflow metadata
+  pull-requests: write # To approve and merge PRs
+  contents: write # To merge PRs
 
 jobs:
   dependabot-auto-merge:
@@ -27,84 +24,44 @@ jobs:
         with:
           github-token: "${{ secrets.GITHUB_TOKEN }}"
 
-      - name: Auto-approve
-        if: steps.metadata.outputs.update-type == 'version-update:semver-patch' || steps.metadata.outputs.update-type == 'version-update:semver-minor'
+      - name: Display update info
+        run: |
+          echo "📦 Package: ${{ steps.metadata.outputs.dependency-names }}"
+          echo "🔄 Update type: ${{ steps.metadata.outputs.update-type }}"
+          echo "📊 Previous version: ${{ steps.metadata.outputs.previous-version }}"
+          echo "📈 New version: ${{ steps.metadata.outputs.new-version }}"
+
+      - name: Auto-approve patch and minor updates
+        if: |
+          steps.metadata.outputs.update-type == 'version-update:semver-patch' ||
+          steps.metadata.outputs.update-type == 'version-update:semver-minor'
         run: gh pr review --approve "$PR_URL"
         env:
           PR_URL: ${{ github.event.pull_request.html_url }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Enable auto-merge for patch and minor updates
-        if: steps.metadata.outputs.update-type == 'version-update:semver-patch' || steps.metadata.outputs.update-type == 'version-update:semver-minor'
-        run: gh pr merge --auto --squash "$PR_URL"
+      - name: Add auto-merge label
+        if: |
+          steps.metadata.outputs.update-type == 'version-update:semver-patch' ||
+          steps.metadata.outputs.update-type == 'version-update:semver-minor'
+        run: gh pr edit "$PR_URL" --add-label "auto-merge"
         env:
           PR_URL: ${{ github.event.pull_request.html_url }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-  auto-version-bump:
-    name: Auto Version Bump
-    runs-on: ubuntu-latest
-    if: github.event.pull_request.merged == true && github.actor == 'dependabot[bot]'
-
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-          fetch-depth: 0
-
-      - name: Dependabot metadata
-        id: metadata
-        uses: dependabot/fetch-metadata@v2
-        with:
-          github-token: "${{ secrets.GITHUB_TOKEN }}"
-
-      - name: Install Rust
-        uses: dtolnay/rust-toolchain@stable
-
-      - name: Bump patch version
-        if: steps.metadata.outputs.update-type == 'version-update:semver-patch'
+      - name: Enable auto-merge
+        if: |
+          steps.metadata.outputs.update-type == 'version-update:semver-patch' ||
+          steps.metadata.outputs.update-type == 'version-update:semver-minor'
         run: |
-          # Get current version
-          CURRENT_VERSION=$(cargo pkgid | cut -d# -f2 | cut -d: -f2)
-          echo "Current version: $CURRENT_VERSION"
-
-          # Bump patch version
-          IFS='.' read -ra VERSION_PARTS <<< "$CURRENT_VERSION"
-          MAJOR=${VERSION_PARTS[0]}
-          MINOR=${VERSION_PARTS[1]}
-          PATCH=${VERSION_PARTS[2]}
-          NEW_PATCH=$((PATCH + 1))
-          NEW_VERSION="$MAJOR.$MINOR.$NEW_PATCH"
-
-          echo "New version: $NEW_VERSION"
-
-          # Update Cargo.toml
-          sed -i "s/version = \"$CURRENT_VERSION\"/version = \"$NEW_VERSION\"/" Cargo.toml
-
-          # Commit changes
-          git config --local user.email "action@github.com"
-          git config --local user.name "GitHub Action"
-          git add Cargo.toml
-          git commit -m "bump: patch version to $NEW_VERSION [skip ci]"
-          git push
-
-      - name: Create release tag
-        if: steps.metadata.outputs.update-type == 'version-update:semver-patch' && env.AUTO_RELEASE == 'true'
-        run: |
-          NEW_VERSION=$(cargo pkgid | cut -d# -f2 | cut -d: -f2)
-          git tag -a "v$NEW_VERSION" -m "Auto-release v$NEW_VERSION with dependency updates"
-          git push origin "v$NEW_VERSION"
+          echo "🤖 Enabling auto-merge for ${{ steps.metadata.outputs.dependency-names }}"
+          gh pr merge --auto --squash "$PR_URL"
         env:
-          AUTO_RELEASE: "false" # Set to 'true' to enable auto-releases for patch updates
+          PR_URL: ${{ github.event.pull_request.html_url }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-  notify-updates:
-    name: Notify Updates
-    runs-on: ubuntu-latest
-    if: github.event.pull_request.merged == true && github.actor == 'dependabot[bot]'
-
-    steps:
-      - name: Comment on PR
+      - name: Comment on major updates
+        if: steps.metadata.outputs.update-type == 'version-update:semver-major'
         uses: actions/github-script@v7
         with:
           script: |
@@ -112,5 +69,5 @@ jobs:
               issue_number: context.issue.number,
               owner: context.repo.owner,
               repo: context.repo.repo,
-              body: '🤖 **Dependabot Update Merged**\n\n✅ Dependencies have been automatically updated and merged!\n\n📦 The crate may be automatically published if this was a patch update.'
+              body: '⚠️ **Major Version Update Detected**\n\nThis PR updates `${{ steps.metadata.outputs.dependency-names }}` from `${{ steps.metadata.outputs.previous-version }}` to `${{ steps.metadata.outputs.new-version }}`.\n\nMajor version updates may contain breaking changes and require manual review.\n\nPlease review the [changelog](${{ steps.metadata.outputs.changelog }}) and test thoroughly before merging.'
             })

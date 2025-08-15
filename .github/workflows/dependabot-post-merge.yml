@@ -1,0 +1,154 @@
+name: Dependabot Post-Merge
+
+on:
+  push:
+    branches: [main]
+
+env:
+  CARGO_TERM_COLOR: always
+
+permissions:
+  contents: write # To push commits and tags
+
+jobs:
+  post-merge-actions:
+    name: Post-Merge Version Bump
+    runs-on: ubuntu-latest
+    # Only run if the commit was from dependabot and contains [skip ci] to avoid loops
+    if: |
+      github.event.pusher.name == 'dependabot[bot]' &&
+      !contains(github.event.head_commit.message, '[skip ci]')
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          fetch-depth: 0
+
+      - name: Get merge info
+        id: merge_info
+        run: |
+          # Extract dependency info from commit message
+          COMMIT_MSG="${{ github.event.head_commit.message }}"
+          echo "Commit message: $COMMIT_MSG"
+
+          # Check if it's a dependency update
+          if [[ "$COMMIT_MSG" =~ deps.*: ]]; then
+            echo "dependency_update=true" >> $GITHUB_OUTPUT
+
+            # Determine update type (simplified detection)
+            if [[ "$COMMIT_MSG" =~ "patch" ]] || [[ "$COMMIT_MSG" =~ "0\.0\." ]]; then
+              echo "update_type=patch" >> $GITHUB_OUTPUT
+            elif [[ "$COMMIT_MSG" =~ "minor" ]] || [[ "$COMMIT_MSG" =~ "0\.[0-9]+\.0" ]]; then
+              echo "update_type=minor" >> $GITHUB_OUTPUT
+            else
+              echo "update_type=none" >> $GITHUB_OUTPUT
+            fi
+          else
+            echo "dependency_update=false" >> $GITHUB_OUTPUT
+            echo "update_type=none" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Install Rust
+        if: steps.merge_info.outputs.dependency_update == 'true' && steps.merge_info.outputs.update_type == 'patch'
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install cargo-edit
+        if: steps.merge_info.outputs.dependency_update == 'true' && steps.merge_info.outputs.update_type == 'patch'
+        run: |
+          if ! command -v cargo-set-version &> /dev/null; then
+            cargo install cargo-edit
+          fi
+
+      - name: Get current version
+        if: steps.merge_info.outputs.dependency_update == 'true' && steps.merge_info.outputs.update_type == 'patch'
+        id: current_version
+        run: |
+          VERSION=$(cargo pkgid | cut -d# -f2 | cut -d: -f2)
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "Current version: $VERSION"
+
+      - name: Bump patch version
+        if: steps.merge_info.outputs.dependency_update == 'true' && steps.merge_info.outputs.update_type == 'patch'
+        id: new_version
+        run: |
+          # Use cargo-edit to bump version properly
+          cargo set-version --bump patch
+
+          # Get the new version
+          NEW_VERSION=$(cargo pkgid | cut -d# -f2 | cut -d: -f2)
+          echo "version=$NEW_VERSION" >> $GITHUB_OUTPUT
+          echo "New version: $NEW_VERSION"
+
+      - name: Update CHANGELOG
+        if: steps.merge_info.outputs.dependency_update == 'true' && steps.merge_info.outputs.update_type == 'patch'
+        run: |
+          DATE=$(date '+%Y-%m-%d')
+          NEW_VERSION="${{ steps.new_version.outputs.version }}"
+
+          # Check if CHANGELOG.md exists
+          if [ -f "CHANGELOG.md" ]; then
+            # Add entry under Unreleased section
+            if grep -q "## \[Unreleased\]" CHANGELOG.md; then
+              echo "📝 Adding dependency update to CHANGELOG"
+              # Create a temporary file with the new entry
+              awk '/## \[Unreleased\]/ {
+                print $0
+                print ""
+                print "### Dependencies"
+                print "- Updated dependencies (automated patch bump to '"$NEW_VERSION"')"
+                next
+              }
+              {print}' CHANGELOG.md > temp_changelog.md
+              mv temp_changelog.md CHANGELOG.md
+            fi
+          fi
+
+      - name: Commit version bump
+        if: steps.merge_info.outputs.dependency_update == 'true' && steps.merge_info.outputs.update_type == 'patch'
+        run: |
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action"
+
+          # Add files
+          git add Cargo.toml Cargo.lock CHANGELOG.md 2>/dev/null || git add Cargo.toml
+
+          # Commit with [skip ci] to prevent loops
+          git commit -m "chore: bump patch version to ${{ steps.new_version.outputs.version }} [skip ci]
+
+          Automated version bump after dependency updates" || echo "No changes to commit"
+
+          # Push if we made a commit
+          if git diff HEAD~ --quiet; then
+            echo "No changes were made"
+          else
+            git push
+            echo "✅ Version bumped to ${{ steps.new_version.outputs.version }}"
+          fi
+
+      - name: Create notification comment
+        if: steps.merge_info.outputs.dependency_update == 'true' && steps.merge_info.outputs.update_type == 'patch'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            // Find the PR that was just merged
+            const commits = await github.rest.repos.listCommits({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              sha: context.sha,
+              per_page: 1
+            });
+
+            const commitMessage = commits.data[0].commit.message;
+            const prMatch = commitMessage.match(/#(\d+)/);
+
+            if (prMatch) {
+              const prNumber = prMatch[1];
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: prNumber,
+                body: `🤖 **Post-Merge Actions Completed**\n\n✅ Version automatically bumped to \`${{ steps.new_version.outputs.version }}\`\n📝 CHANGELOG.md updated\n\nThe changes have been pushed to the main branch.`
+              });
+            }
